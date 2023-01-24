@@ -1,0 +1,101 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  push:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - name: Create folder
+        run: |
+          mkdir -p coderepo
+
+      - name: Checkout tools repo
+        uses: actions/checkout@v3
+        with:
+          repository: ddl-udaysk/domino-sagamaker-integration-githubactions
+          token: ${{ secrets.GIT_CODE }}
+          path: coderepo
+
+      # Runs a set of commands using the runners shell
+      - name: Run a display command
+        run: |
+          echo Add other actions to build,
+         
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # Runs a set of commands using the runners shell
+      - name: Run a setup python libraries
+        run: |
+          pip install -r coderepo/requirements.txt --user
+          echo test, and deploy your project.
+
+
+      # Runs a set of commands using the runners shell
+      - name: Run model build and export script --
+        env:
+          MODELNAME: ${{ vars.MODELNAME }}  
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}  
+          USER_API_KEY: ${{ vars.USER_API_KEY }}  
+          ECRPASSWORD: ${{ secrets.ECRPASSWORD }}  
+        run: |
+          python3 coderepo/BuildAndExportModelToECR.py
+
+      - name: Configure AWS credentials from Production account
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      # Runs a set of commands using the runners shell
+      - name: Run sagemaker deploy script ----
+        run: |
+          python3 coderepo/deploytosagemaker.py
+        env:
+          MODELNAME: ${{ vars.MODELNAME }}    
+
+
+      # Runs a set of commands using the runners shell
+      - name: Run install chalice 
+        run: |
+          python3 -m pip install chalice
+
+      # Runs a set of commands using the runners shell
+      - name: Run install jq 
+        run: |
+          sudo apt-get update
+          sudo apt-get install jq
+
+      # Runs a set of commands using the runners shell
+      - name: Run deploy endpoint 
+        run: |
+          chalice new-project  ${{ vars.MODELNAME }}  
+          cp coderepo/app.py ${{ vars.MODELNAME }}  
+          cp coderepo/chalice/* ${{ vars.MODELNAME }}/.chalice/  
+          cd ${{ vars.MODELNAME }}/.chalice/ 
+          cat config-template.json | jq --arg name ${{ vars.MODELNAME }} '. + {"app_name": $name}' > config.json
+          cd ..
+          ls
+          chalice deploy
+
+
